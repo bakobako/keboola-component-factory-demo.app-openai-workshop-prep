@@ -1,7 +1,7 @@
 import logging
 import json
 import openai
-from typing import Iterator, List
+from typing import Iterator, List, Dict
 from csv import DictReader, DictWriter
 
 from keboola.component.base import ComponentBase
@@ -23,11 +23,9 @@ MODEL_BASE_FREQUENCY_PENALTY = 0
 MODEL_BASE_PRESENCE_PENALTY = 0
 
 
-def read_messages_from_file(file_name: str, file_columns: List[str], text_column: str) -> Iterator[str]:
+def read_messages_from_file(file_name: str) -> Iterator[Dict]:
     with open(file_name) as in_file:
-        reader = DictReader(in_file, file_columns)
-        for line in reader:
-            yield line.get(text_column)
+        yield from DictReader(in_file)
 
 
 def process_message(openai_key: str, prompt: str) -> str:
@@ -44,14 +42,22 @@ def process_message(openai_key: str, prompt: str) -> str:
     return response.choices[0].text
 
 
-def analyze_messages_in_file(in_file_name: str, text_column: str, file_columns: List[str], out_file_name: str,
-                             base_prompt: str, openai_key: str) -> None:
+def generate_prompt(base_prompt: str, message: str) -> str:
+    return f"{base_prompt}\n\"\"\"{message}\"\"\""
+
+
+def analyze_messages_in_file(in_file_name: str,
+                             text_column: str,
+                             out_file_name: str,
+                             out_file_columns: List[str],
+                             base_prompt: str,
+                             openai_key: str) -> None:
     with open(out_file_name, 'w') as out_file:
-        writer = DictWriter(out_file, ["message", "output"])
-        for message in read_messages_from_file(in_file_name, file_columns, text_column):
-            prompt = f"{base_prompt}\n\"\"\"{message}\"\"\""
+        writer = DictWriter(out_file, out_file_columns)
+        for message in read_messages_from_file(in_file_name):
+            prompt = generate_prompt(base_prompt, message.get(text_column))
             data = json.loads(process_message(openai_key, prompt))
-            writer.writerow({"message": message, "output": data})
+            writer.writerow({**message, "open_ai_output": data})
 
 
 class Component(ComponentBase):
@@ -69,9 +75,11 @@ class Component(ComponentBase):
 
         input_table = self.get_input_tables_definitions()[0]
 
-        output_table = self.create_out_table_definition("analyzed_output.csv", columns=["message", "output"])
+        out_table_columns = input_table.columns + ["open_ai_output"]
 
-        analyze_messages_in_file(input_table.full_path, text_column, input_table.columns, output_table.full_path,
+        output_table = self.create_out_table_definition("analyzed_output.csv", columns=out_table_columns)
+
+        analyze_messages_in_file(input_table.full_path, text_column, output_table.full_path, out_table_columns,
                                  base_prompt, api_token)
 
         self.write_manifest(output_table)
