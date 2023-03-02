@@ -69,7 +69,7 @@ class Component(ComponentBase):
 
         input_table = self.get_input_tables_definitions()[0]
 
-        output_table = self.create_out_table_definition("analyzed_output.csv")
+        output_table = self.create_out_table_definition("analyzed_output.csv", columns=["message", "output"])
 
         analyze_messages_in_file(input_table.full_path, text_column, input_table.columns, output_table.full_path,
                                  base_prompt, api_token)
