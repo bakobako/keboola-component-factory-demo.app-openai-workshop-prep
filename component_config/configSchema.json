@@ -12,9 +12,14 @@
     },
     "prompt": {
       "type": "string",
-      "format" : "textarea",
+      "format": "textarea",
       "title": "Prompt",
       "propertyOrder": 2
+    },
+    "text_column": {
+      "type": "string",
+      "title": "Column Containing text",
+      "propertyOrder": 3
     }
   }
 }

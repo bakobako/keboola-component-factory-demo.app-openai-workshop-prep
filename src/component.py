@@ -10,6 +10,7 @@ from keboola.component.exceptions import UserException
 # configuration variables
 KEY_API_TOKEN = '#api_token'
 KEY_PROMPT = 'prompt'
+KEY_TEXT_COLUMN = "text_column"
 
 REQUIRED_PARAMETERS = [KEY_API_TOKEN, KEY_PROMPT]
 REQUIRED_IMAGE_PARS = []
@@ -64,12 +65,13 @@ class Component(ComponentBase):
 
         base_prompt = params.get(KEY_PROMPT)
         api_token = params.get(KEY_API_TOKEN)
+        text_column = params.get(KEY_TEXT_COLUMN)
 
         input_table = self.get_input_tables_definitions()[0]
 
         output_table = self.create_out_table_definition("analyzed_output.csv")
 
-        analyze_messages_in_file(input_table.full_path, "message", input_table.columns, output_table.full_path,
+        analyze_messages_in_file(input_table.full_path, text_column, input_table.columns, output_table.full_path,
                                  base_prompt, api_token)
 
         self.write_manifest(output_table)
