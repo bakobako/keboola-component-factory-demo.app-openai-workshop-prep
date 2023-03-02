@@ -1,76 +1,78 @@
-"""
-Template Component main class.
-
-"""
-import csv
 import logging
-from datetime import datetime
+import json
+import openai
+from typing import Iterator, List
+from csv import DictReader, DictWriter
 
 from keboola.component.base import ComponentBase
 from keboola.component.exceptions import UserException
 
 # configuration variables
 KEY_API_TOKEN = '#api_token'
-KEY_PRINT_HELLO = 'print_hello'
+KEY_PROMPT = 'prompt'
 
-# list of mandatory parameters => if some is missing,
-# component will fail with readable message on initialization.
-REQUIRED_PARAMETERS = [KEY_PRINT_HELLO]
+REQUIRED_PARAMETERS = [KEY_API_TOKEN, KEY_PROMPT]
 REQUIRED_IMAGE_PARS = []
+
+MODEL_NAME = "text-davinci-003"
+MODEL_BASE_TEMPERATURE = 0.7
+MODEL_BASE_MAX_TOKENS = 512
+MODEL_BASE_TOP_P = 1
+MODEL_BASE_FREQUENCY_PENALTY = 0
+MODEL_BASE_PRESENCE_PENALTY = 0
+
+
+def read_messages_from_file(file_name: str, file_columns: List[str], text_column: str) -> Iterator[str]:
+    with open(file_name) as in_file:
+        reader = DictReader(in_file, file_columns)
+        for line in reader:
+            yield line.get(text_column)
+
+
+def process_message(openai_key: str, prompt: str) -> str:
+    openai.api_key = openai_key
+    response = openai.Completion.create(
+        model=MODEL_NAME,
+        prompt=prompt,
+        temperature=MODEL_BASE_TEMPERATURE,
+        max_tokens=MODEL_BASE_MAX_TOKENS,
+        top_p=MODEL_BASE_TOP_P,
+        frequency_penalty=MODEL_BASE_FREQUENCY_PENALTY,
+        presence_penalty=MODEL_BASE_PRESENCE_PENALTY
+    )
+    return response.choices[0].text
+
+
+def analyze_messages_in_file(in_file_name: str, text_column: str, file_columns: List[str], out_file_name: str,
+                             base_prompt: str, openai_key: str) -> None:
+    with open(out_file_name, 'w') as out_file:
+        writer = DictWriter(out_file, ["message", "output"])
+        for message in read_messages_from_file(in_file_name, file_columns, text_column):
+            prompt = f"{base_prompt}\n\"\"\"{message}\"\"\""
+            data = json.loads(process_message(openai_key, prompt))
+            writer.writerow({"message": message, "output": data})
 
 
 class Component(ComponentBase):
-    """
-        Extends base class for general Python components. Initializes the CommonInterface
-        and performs configuration validation.
-
-        For easier debugging the data folder is picked up by default from `../data` path,
-        relative to working directory.
-
-        If `debug` parameter is present in the `config.json`, the default logger is set to verbose DEBUG mode.
-    """
-
     def __init__(self):
         super().__init__()
 
     def run(self):
-        """
-        Main execution code
-        """
-
-        # ####### EXAMPLE TO REMOVE
-        # check for missing configuration parameters
         self.validate_configuration_parameters(REQUIRED_PARAMETERS)
         self.validate_image_parameters(REQUIRED_IMAGE_PARS)
         params = self.configuration.parameters
-        # Access parameters in data/config.json
-        if params.get(KEY_PRINT_HELLO):
-            logging.info("Hello World")
 
-        # get last state data/in/state.json from previous run
-        previous_state = self.get_state_file()
-        logging.info(previous_state.get('some_state_parameter'))
+        base_prompt = params.get(KEY_PROMPT)
+        api_token = params.get(KEY_API_TOKEN)
 
-        # Create output table (Tabledefinition - just metadata)
-        table = self.create_out_table_definition('output.csv', incremental=True, primary_key=['timestamp'])
+        input_table = self.get_input_tables_definitions()[0]
 
-        # get file path of the table (data/out/tables/Features.csv)
-        out_table_path = table.full_path
-        logging.info(out_table_path)
+        output_table = self.create_out_table_definition("analyzed_output.csv")
 
-        # DO whatever and save into out_table_path
-        with open(table.full_path, mode='wt', encoding='utf-8', newline='') as out_file:
-            writer = csv.DictWriter(out_file, fieldnames=['timestamp'])
-            writer.writeheader()
-            writer.writerow({"timestamp": datetime.now().isoformat()})
+        analyze_messages_in_file(input_table.full_path, "message", input_table.columns, output_table.full_path,
+                                 base_prompt, api_token)
 
-        # Save table manifest (output.csv.manifest) from the tabledefinition
-        self.write_manifest(table)
-
-        # Write new state - will be available next run
-        self.write_state_file({"some_state_parameter": "value"})
-
-        # ####### EXAMPLE TO REMOVE END
+        self.write_manifest(output_table)
 
 
 """
