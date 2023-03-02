@@ -1,0 +1,1 @@
+OpenAI Workshop long description
