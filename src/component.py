@@ -7,7 +7,6 @@ from csv import DictReader, DictWriter
 from keboola.component.base import ComponentBase
 from keboola.component.exceptions import UserException
 
-# configuration variables
 KEY_API_TOKEN = '#api_token'
 KEY_PROMPT = 'prompt'
 KEY_TEXT_COLUMN = "text_column"
@@ -85,9 +84,6 @@ class Component(ComponentBase):
         self.write_manifest(output_table)
 
 
-"""
-        Main entrypoint
-"""
 if __name__ == "__main__":
     try:
         comp = Component()
